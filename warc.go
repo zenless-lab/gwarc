@@ -141,7 +141,7 @@ type WarcInfoRecord struct {
 type MetadataRecord struct {
 	// Version indicates the WARC format version
 	Version WARCVariant
-	
+
 	// Via contains the URI where the archived URI was discovered
 	Via string `warc:"via"`
 	// HopsFromSeed describes the type of each hop from the seed URI to the current URI
