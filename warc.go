@@ -1,6 +1,9 @@
 package gwarc
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 type WARCVariant string
 
@@ -62,7 +65,7 @@ type WARCRecord struct {
 	// RecordID is a globally unique identifier for the record
 	RecordID string `warc:"WARC-Record-ID"`
 	// ContentLength specifies the length of the record's content block in bytes
-	ContentLength int64 `warc:"Content-Length"`
+	ContentLength uint64 `warc:"Content-Length"`
 	// Date represents the record creation time in UTC
 	Date time.Time `warc:"WARC-Date"`
 	// Type indicates the type of WARC record
@@ -103,7 +106,7 @@ type WARCRecord struct {
 	// SegmentOriginID references the first record in a segmented series
 	SegmentOriginID string `warc:"WARC-Segment-Origin-ID,omitempty"`
 	// SegmentTotalLength specifies the total length of all segments
-	SegmentTotalLength int64 `warc:"WARC-Segment-Total-Length,omitempty"`
+	SegmentTotalLength uint64 `warc:"WARC-Segment-Total-Length,omitempty"`
 
 	// Body
 
@@ -144,5 +147,68 @@ type MetadataRecord struct {
 	// HopsFromSeed describes the type of each hop from the seed URI to the current URI
 	HopsFromSeed string `warc:"hopsFromSeed"`
 	// FetchTimeMs indicates the time taken to collect the archived URI (in milliseconds)
-	FetchTimeMs int64 `warc:"fetchTimeMs"`
+	FetchTimeMs uint64 `warc:"fetchTimeMs"`
+}
+
+// Validate checks if all required fields are present and valid
+func (w *WARCRecord) Validate() error {
+	if w.Version == "" {
+		return fmt.Errorf("WARC version is required")
+	}
+	if w.RecordID == "" {
+		return fmt.Errorf("WARC-Record-ID is required")
+	}
+	if w.Date.IsZero() {
+		return fmt.Errorf("WARC-Date is required")
+	}
+	if w.Type == "" {
+		return fmt.Errorf("WARC-Type is required")
+	}
+	return nil
+}
+
+// Validate checks if all required fields are present and valid
+func (w *WarcInfoRecord) Validate() error {
+	if w.Version == "" {
+		return fmt.Errorf("WARC version is required")
+	}
+	if w.Operator == "" {
+		return fmt.Errorf("operator is required")
+	}
+	if w.Software == "" {
+		return fmt.Errorf("software is required")
+	}
+	if w.Robots == "" {
+		return fmt.Errorf("robots is required")
+	}
+	if w.Hostname == "" {
+		return fmt.Errorf("hostname is required")
+	}
+	if w.IP == "" {
+		return fmt.Errorf("IP is required")
+	}
+	if w.UserAgent == "" {
+		return fmt.Errorf("http-header-user-agent is required")
+	}
+	if w.From == "" {
+		return fmt.Errorf("http-header-from is required")
+	}
+	return nil
+}
+
+// Validate checks if all required fields are present and valid
+func (m *MetadataRecord) Validate() error {
+	if m.Version == "" {
+		return fmt.Errorf("WARC version is required")
+	}
+	if m.Via == "" {
+		return fmt.Errorf("via is required")
+	}
+	if m.HopsFromSeed == "" {
+		return fmt.Errorf("hopsFromSeed is required")
+	}
+	if m.FetchTimeMs == 0 {
+		return fmt.Errorf("fetchTimeMs is required")
+	}
+	return nil
 }
