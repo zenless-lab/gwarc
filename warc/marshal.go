@@ -1,4 +1,4 @@
-package gwarc
+package warc
 
 import (
 	"bytes"

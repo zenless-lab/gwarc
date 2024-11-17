@@ -1,11 +1,11 @@
-package gwarc_test
+package warc_test
 
 import (
 	"strings"
 	"testing"
 	"time"
 
-	. "github.com/zenless-lab/gwarc"
+	. "github.com/zenless-lab/gwarc/warc"
 )
 
 func TestMarshal(t *testing.T) {

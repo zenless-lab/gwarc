@@ -1,10 +1,10 @@
-package gwarc_test
+package warc_test
 
 import (
 	"testing"
 	"time"
 
-	. "github.com/zenless-lab/gwarc"
+	. "github.com/zenless-lab/gwarc/warc"
 )
 
 func TestUnmarshal(t *testing.T) {
