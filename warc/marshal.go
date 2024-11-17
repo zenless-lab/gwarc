@@ -11,6 +11,10 @@ import (
 
 // Marshal converts a WARCRecord into WARC format bytes
 func Marshal(v any) ([]byte, error) {
+	if marshaler, ok := v.(WARCRecordMarshaler); ok {
+		return marshaler.MarshalWARCRecord()
+	}
+
 	val := reflect.ValueOf(v)
 	if val.Kind() == reflect.Ptr {
 		val = val.Elem()

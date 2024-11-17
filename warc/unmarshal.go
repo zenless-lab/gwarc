@@ -13,6 +13,11 @@ import (
 
 // Unmarshal parses WARC formatted data and stores the result in the value pointed to by v.
 func Unmarshal[T any](data []byte, v T) error {
+	// Check if v implements WARCRecordUnmarshaler
+	if unmarshaler, ok := any(v).(WARCRecordUnmarshaler); ok {
+		return unmarshaler.UnmarshalWARCRecord(data)
+	}
+
 	reader := bufio.NewReader(bytes.NewReader(data))
 
 	versionLine, err := reader.ReadString('\n')
@@ -63,6 +68,10 @@ func Unmarshal[T any](data []byte, v T) error {
 	_, err = reader.Read(content)
 	if err != nil {
 		return fmt.Errorf("failed to read content: %v", err)
+	}
+	contentField := elem.FieldByName("Content")
+	if contentField.IsValid() && contentField.CanSet() {
+		contentField.SetBytes(content)
 	}
 
 	if val.Kind() != reflect.Ptr {

@@ -1,7 +1,12 @@
 package warc
 
 import (
+	"bufio"
+	"bytes"
 	"fmt"
+	"io"
+	"os"
+	"strconv"
 	"time"
 )
 
@@ -114,12 +119,15 @@ type WARCRecord struct {
 	Content []byte
 }
 
-// WarcInfoRecord represents metadata about the WARC file itself.
-// This information is stored in records of type "warcinfo".
-type WarcInfoRecord struct {
-	// Version indicates the WARC format version
-	Version WARCVariant
+type WARCRecordMarshaler interface {
+	MarshalWARCRecord() ([]byte, error)
+}
 
+type WARCRecordUnmarshaler interface {
+	UnmarshalWARCRecord([]byte) error
+}
+
+type warcInfoExtraRecord struct {
 	// Operator contains contact information for the WARC creator
 	Operator string `warc:"operator"`
 	// Software identifies the software used to create the WARC
@@ -136,18 +144,244 @@ type WarcInfoRecord struct {
 	From string `warc:"http-header-from"`
 }
 
-// MetadataRecord represents additional information about another record.
-// This information is stored in records of type "metadata".
-type MetadataRecord struct {
-	// Version indicates the WARC format version
-	Version WARCVariant
+// WarcInfoRecord represents metadata about the WARC file itself.
+// This information is stored in records of type "warcinfo".
+type WarcInfoRecord struct {
+	WARCRecord
 
+	// Extra fields
+	warcInfoExtraRecord
+}
+
+func (w *WarcInfoRecord) MarshalWARCRecord() ([]byte, error) {
+	warcRecordResult, err := Marshal(w.WARCRecord)
+	if err != nil {
+		return nil, err
+	}
+
+	var extraRecordResult []byte
+	if w.Operator != "" {
+		extraRecordResult = append(extraRecordResult, []byte("operator: "+w.Operator+"\n")...)
+	}
+	if w.Software != "" {
+		extraRecordResult = append(extraRecordResult, []byte("software: "+w.Software+"\n")...)
+	}
+	if w.Robots != "" {
+		extraRecordResult = append(extraRecordResult, []byte("robots: "+w.Robots+"\n")...)
+	}
+	if w.Hostname != "" {
+		extraRecordResult = append(extraRecordResult, []byte("hostname: "+w.Hostname+"\n")...)
+	}
+	if w.IP != "" {
+		extraRecordResult = append(extraRecordResult, []byte("ip: "+w.IP+"\n")...)
+	}
+	if w.UserAgent != "" {
+		extraRecordResult = append(extraRecordResult, []byte("http-header-user-agent: "+w.UserAgent+"\n")...)
+	}
+	if w.From != "" {
+		extraRecordResult = append(extraRecordResult, []byte("http-header-from: "+w.From+"\n")...)
+	}
+
+	return append(warcRecordResult, extraRecordResult...), nil
+
+}
+
+func (w *WarcInfoRecord) UnmarshalWARCRecord(data []byte) (err error) {
+	err = Unmarshal(data, &w.WARCRecord)
+	if err != nil {
+		return
+	}
+
+	content := w.WARCRecord.Content
+
+	lines := bytes.Split(content, []byte("\n"))
+	for _, line := range lines {
+		parts := bytes.SplitN(line, []byte(":"), 2)
+		if len(parts) != 2 {
+			continue
+		}
+		key := string(bytes.TrimSpace(parts[0]))
+		value := string(bytes.TrimSpace(parts[1]))
+		switch key {
+		case "robots":
+			w.Robots = value
+		case "hostname":
+			w.Hostname = value
+		case "software":
+			w.Software = value
+		case "operator":
+			w.Operator = value
+		}
+	}
+
+	return
+}
+
+type metadataExtraRecord struct {
 	// Via contains the URI where the archived URI was discovered
 	Via string `warc:"via"`
 	// HopsFromSeed describes the type of each hop from the seed URI to the current URI
 	HopsFromSeed string `warc:"hopsFromSeed"`
 	// FetchTimeMs indicates the time taken to collect the archived URI (in milliseconds)
 	FetchTimeMs uint64 `warc:"fetchTimeMs"`
+}
+
+// MetadataRecord represents additional information about another record.
+// This information is stored in records of type "metadata".
+type MetadataRecord struct {
+	WARCRecord
+
+	// Extra fields
+	metadataExtraRecord
+}
+
+func (m *MetadataRecord) MarshalWARCRecord() ([]byte, error) {
+	warcRecordResult, err := Marshal(m.WARCRecord)
+	if err != nil {
+		return nil, err
+	}
+
+	var extraRecordResult []byte
+	if m.Via != "" {
+		extraRecordResult = append(extraRecordResult, []byte("via: "+m.Via+"\n")...)
+	}
+	if m.HopsFromSeed != "" {
+		extraRecordResult = append(extraRecordResult, []byte("hopsFromSeed: "+m.HopsFromSeed+"\n")...)
+	}
+	if m.FetchTimeMs != 0 {
+		extraRecordResult = append(extraRecordResult, []byte("fetchTimeMs: "+strconv.FormatUint(m.FetchTimeMs, 10)+"\n")...)
+	}
+
+	return append(warcRecordResult, extraRecordResult...), nil
+}
+
+func (m *MetadataRecord) UnmarshalWARCRecord(data []byte) (err error) {
+	err = Unmarshal(data, &m.WARCRecord)
+	if err != nil {
+		return
+	}
+
+	content := m.WARCRecord.Content
+
+	lines := bytes.Split(content, []byte("\n"))
+	for _, line := range lines {
+		parts := bytes.SplitN(line, []byte(":"), 2)
+		if len(parts) != 2 {
+			continue
+		}
+		key := string(bytes.TrimSpace(parts[0]))
+		value := string(bytes.TrimSpace(parts[1]))
+		switch key {
+		case "via":
+			m.Via = value
+		case "hopsFromSeed":
+			m.HopsFromSeed = value
+		case "fetchTimeMs":
+			m.FetchTimeMs, err = strconv.ParseUint(value, 10, 64)
+			if err != nil {
+				return
+			}
+		}
+	}
+
+	return
+}
+
+type WARC struct {
+	scanner *bufio.Scanner
+}
+
+func NewWARC(r io.Reader) *WARC {
+	scanner := bufio.NewScanner(r)
+
+	split := func(data []byte, atEOF bool) (advance int, token []byte, err error) {
+		if atEOF && len(data) == 0 {
+			return 0, nil, nil
+		}
+
+		// Look for "WARC/x.x" pattern
+		if i := bytes.Index(data, []byte("WARC/")); i >= 0 {
+			// Return the data before "WARC/" if we're not at the start
+			if i > 0 {
+				return i, data[0:i], nil
+			}
+			// Find the end of this block (next "WARC/" or EOF)
+			if j := bytes.Index(data[i+5:], []byte("WARC/")); j >= 0 {
+				return i + j + 5, data[i : i+j+5], nil
+			}
+			// If we're at EOF, return the rest
+			if atEOF {
+				return len(data), data, nil
+			}
+		}
+
+		// Request more data
+		return 0, nil, nil
+	}
+	scanner.Split(split)
+
+	return &WARC{
+		scanner: scanner,
+	}
+}
+
+func NewWARCFromFile(path string) (*WARC, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	return NewWARC(file), nil
+}
+
+func NewWARCFromString(s string) *WARC {
+	return NewWARC(bytes.NewBufferString(s))
+}
+
+func NewWARCFromBytes(b []byte) *WARC {
+	return NewWARC(bytes.NewBuffer(b))
+}
+
+func (w *WARC) NextChunk() (*[]byte, error) {
+	if !w.scanner.Scan() {
+		return nil, io.EOF
+	}
+	chunk := w.scanner.Bytes()
+	return &chunk, nil
+}
+
+func (w *WARC) Next() (record any, kind WARCRecordType, err error) {
+	chunk, err := w.NextChunk()
+
+	if err != nil {
+		return
+	}
+
+	var loadedRecord WARCRecord
+	if err = Unmarshal(*chunk, &loadedRecord); err != nil {
+		return
+	}
+
+	if loadedRecord.Type == "metadata" {
+		var metadata MetadataRecord
+		if err = Unmarshal(*chunk, &metadata); err != nil {
+			return
+		}
+		record = metadata
+		kind = WARCTypeMetadata
+		return
+	} else if loadedRecord.Type == "warcinfo" {
+		var warcinfo WarcInfoRecord
+		if err = Unmarshal(*chunk, &warcinfo); err != nil {
+			return
+		}
+		record = warcinfo
+		kind = WARCTypeWarcinfo
+		return
+	} else {
+		record = loadedRecord
+		kind = loadedRecord.Type
+		return
+	}
 }
 
 // Validate checks if all required fields are present and valid
@@ -169,8 +403,8 @@ func (w *WARCRecord) Validate() error {
 
 // Validate checks if all required fields are present and valid
 func (w *WarcInfoRecord) Validate() error {
-	if w.Version == "" {
-		return fmt.Errorf("WARC version is required")
+	if w.WARCRecord.Validate() != nil {
+		return fmt.Errorf("WARC record is invalid")
 	}
 	if w.Operator == "" {
 		return fmt.Errorf("operator is required")
@@ -198,8 +432,8 @@ func (w *WarcInfoRecord) Validate() error {
 
 // Validate checks if all required fields are present and valid
 func (m *MetadataRecord) Validate() error {
-	if m.Version == "" {
-		return fmt.Errorf("WARC version is required")
+	if m.WARCRecord.Validate() != nil {
+		return fmt.Errorf("WARC record is invalid")
 	}
 	if m.Via == "" {
 		return fmt.Errorf("via is required")
