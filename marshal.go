@@ -10,7 +10,7 @@ import (
 )
 
 // Marshal converts a WARCRecord into WARC format bytes
-func Marshal(v interface{}) ([]byte, error) {
+func Marshal(v any) ([]byte, error) {
 	val := reflect.ValueOf(v)
 	if val.Kind() == reflect.Ptr {
 		val = val.Elem()

@@ -113,3 +113,57 @@ func setField(field reflect.Value, value string) error {
 	}
 	return nil
 }
+
+// Valid checks if the provided data is a valid WARC formatted data.
+func Valid(data []byte) error {
+	reader := bufio.NewReader(bytes.NewReader(data))
+
+	versionLine, err := reader.ReadString('\n')
+	if err != nil {
+		return fmt.Errorf("failed to read version: %v", err)
+	}
+
+	version := strings.TrimSpace(strings.TrimPrefix(versionLine, "WARC/"))
+
+	warcVersion := WARCVariant(version)
+	if warcVersion != WARCVariant1_0 && warcVersion != WARCVariant1_1 {
+		return fmt.Errorf("unsupported WARC version: %s", version)
+	}
+
+	headers := make(map[string]string)
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			return fmt.Errorf("failed to read header: %v", err)
+		}
+
+		line = strings.TrimSpace(line)
+		if line == "" {
+			break
+		}
+
+		parts := strings.SplitN(line, ":", 2)
+		if len(parts) != 2 {
+			return fmt.Errorf("invalid header format: %s", line)
+		}
+
+		headers[strings.TrimSpace(parts[0])] = strings.TrimSpace(parts[1])
+	}
+
+	if _, exists := headers["Content-Length"]; !exists {
+		return errors.New("missing Content-Length header")
+	}
+
+	contentLength, err := strconv.ParseInt(headers["Content-Length"], 10, 64)
+	if err != nil {
+		return fmt.Errorf("invalid Content-Length value: %v", err)
+	}
+
+	content := make([]byte, contentLength)
+	_, err = reader.Read(content)
+	if err != nil {
+		return fmt.Errorf("failed to read content: %v", err)
+	}
+
+	return nil
+}
