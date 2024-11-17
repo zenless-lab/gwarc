@@ -116,6 +116,8 @@ func (f CDXFormat) String() string {
 	return strings.Join(fields, " ")
 }
 
+const CDXTimestampFormat = "20060102150405"
+
 // CDXRecord is a single record in a CDX file.
 type CDXRecord struct {
 	// URL field group
@@ -184,7 +186,6 @@ type CDXRecord struct {
 // CDXHeader contains the format and field definitions for a CDX file.
 type CDXHeader struct {
 	Format    CDXFormat
-	Fields    []CDXField
 	Delimiter rune
 }
 
@@ -200,21 +201,7 @@ func NewCDXFile(format CDXFormat) *CDXFile {
 		Header: CDXHeader{
 			Format:    format,
 			Delimiter: ' ',
-			Fields:    parseFormat(format),
 		},
 		Records: make([]CDXRecord, 0),
 	}
-}
-
-// parseFormat parses a CDX format string into a list of fields
-func parseFormat(format CDXFormat) []CDXField {
-	parts := strings.Fields(string(format))
-	if len(parts) > 1 {
-		fields := make([]CDXField, len(parts)-1)
-		for i, part := range parts[1:] {
-			fields[i] = CDXField(part[0])
-		}
-		return fields
-	}
-	return nil
 }

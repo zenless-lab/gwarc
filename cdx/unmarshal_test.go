@@ -20,7 +20,6 @@ http://example.com/ 20010424210312 http://example.com/ text/html 200 ZMSA5TNJUKK
 				Header: CDXHeader{
 					Format:    CDX9,
 					Delimiter: ' ',
-					Fields:    parseFormat(CDX9),
 				},
 				Records: []CDXRecord{
 					{
@@ -46,7 +45,6 @@ http://example.com/ 20010424210312 http://example.com/ text/html 200 ZMSA5TNJUKK
 				Header: CDXHeader{
 					Format:    CDX11,
 					Delimiter: ' ',
-					Fields:    parseFormat(CDX11),
 				},
 				Records: []CDXRecord{
 					{
@@ -75,7 +73,6 @@ http://example1.com/ 20010424210551 http://example1.com/ text/plain 404 PRUJLL24
 				Header: CDXHeader{
 					Format:    CDX9,
 					Delimiter: ' ',
-					Fields:    parseFormat(CDX9),
 				},
 				Records: []CDXRecord{
 					{

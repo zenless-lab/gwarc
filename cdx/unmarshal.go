@@ -11,8 +11,6 @@ import (
 	"time"
 )
 
-const CDXTimestampFormat = "20060102150405"
-
 // Unmarshal parses CDX formatted data and stores the result in v
 func Unmarshal[T any](data []byte, v T) error {
 	// Create scanner to read lines
